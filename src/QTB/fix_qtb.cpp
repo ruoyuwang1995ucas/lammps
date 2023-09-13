@@ -446,7 +446,7 @@ double FixQTB::compute_scalar()
 {
   double energy_all;
   MPI_Allreduce(&energy, &energy_all, 1, MPI_DOUBLE, MPI_SUM, world);
-  return -energy_all;
+  return energy_all;
 
 }
 
