@@ -36,7 +36,6 @@ class FixQTB : public Fix {
   int setmask() override;
   void init() override;
   void setup(int) override;
-  void post_integrate() override;
   void post_force(int) override;
   void post_force_respa(int, int, int) override;
   void end_of_step() override;
@@ -66,9 +65,8 @@ class FixQTB : public Fix {
   // random number arrays give independence between atoms and directions
   double **random_array_0, **random_array_1, **random_array_2;
   int nlevels_respa;
-  double **fran, **flangevin, **flangevinpre, fsum[3], fsumall[3];    // random forces and their sums
+  double **fran, **flangevin, fsum[3], fsumall[3];    // random forces and their sums
   double energy, energy_onestep; // energy exchange with thermal reservoir
-  double **lv; // half step velocity
 };
 
 }    // namespace LAMMPS_NS

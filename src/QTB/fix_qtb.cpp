@@ -43,7 +43,7 @@ using namespace MathConst;
    read parameters
 ------------------------------------------------------------------------- */
 FixQTB::FixQTB(LAMMPS *lmp, int narg, char **arg) :
-  Fix(lmp, narg, arg)//, flangevin(nullptr),lv(nullptr)
+  Fix(lmp, narg, arg)
 {
   if (narg < 3) error->all(FLERR,"Illegal fix qtb command");
 
@@ -105,10 +105,9 @@ FixQTB::FixQTB(LAMMPS *lmp, int narg, char **arg) :
   random_array_2 = nullptr;
   fran = nullptr;
   flangevin = nullptr; // 
-  flangevinpre = nullptr; // Langevin forces of the last step
   id_temp = nullptr;
   temperature = nullptr;
-  lv = nullptr; // velocity of the last time step
+
 
   // energy exchanged with thermal reservoir
   energy = 0.0;
@@ -140,7 +139,6 @@ FixQTB::~FixQTB()
   delete [] id_temp;
   memory->destroy(fran);
   memory->destroy(flangevin);
-  memory->destroy(flangevinpre);
   memory->destroy(random_array_0);
   memory->destroy(random_array_1);
   memory->destroy(random_array_2);
@@ -247,13 +245,6 @@ void FixQTB::setup(int vflag)
   int *mask = atom->mask;
   bigint nlocal = atom->nlocal;
 
-  //store initial velocity
-  for (int i=0; i < nlocal; i++)
-      if (mask[i] & groupbit){
-        lv[i][0]=v[i][0];
-        lv[i][1]=v[i][1];
-        lv[i][2]=v[i][2];
-         }
 
   if (utils::strmatch(update->integrate_style,"^verlet"))
     post_force(vflag);
@@ -264,14 +255,6 @@ void FixQTB::setup(int vflag)
   }
 }
 
-/* ----------------------------------------------------------------
-  post_integrate we need to capture the half 
- ---------------------------------------------------------------------------*/
-void FixQTB::post_integrate()
-{
-  //double lv // half-step velocity
-
-}
 
 /* ----------------------------------------------------------------------
    post_force
@@ -370,13 +353,6 @@ void FixQTB::post_force(int /*vflag*/)
   }
 
 
-  //store langevin forces of the previous step
-  for (int i=0; i < nlocal; i++)
-      if (mask[i] & groupbit){
-        flangevinpre[i][0]=flangevin[i][0];
-        flangevinpre[i][1]=flangevin[i][1];
-        flangevinpre[i][2]=flangevin[i][2];
-         }
   //move 1 step forward
   counter_mu++;
 }
@@ -423,19 +399,11 @@ void FixQTB::end_of_step()
 
 //Calculate energy exchange with thermal reservoir
   energy_onestep = 0.0;
-    for (int i=0; i < nlocal; i++)
-      if (mask[i] & groupbit){
-        energy_onestep += flangevinpre[i][0]*lv[i][0] + flangevinpre[i][1]*lv[i][1] + 
-                          flangevinpre[i][2]*lv[i][2]; }
+  for (int i=0; i < nlocal; i++)
+    if (mask[i] & groupbit){
+        energy_onestep += flangevin[i][0]*v[i][0] + flangevin[i][1]*v[i][1] + 
+                          flangevin[i][2]*v[i][2]; }
     energy += energy_onestep*update->dt;
-// update velocity
-for (int i=0; i < nlocal; i++)
-      if (mask[i] & groupbit){
-        lv[i][0] = v[i][0];
-        lv[i][1] = v[i][1];
-        lv[i][2] = v[i][2];
-         }
-
 }
 
 
@@ -443,10 +411,28 @@ for (int i=0; i < nlocal; i++)
   compute energy transfer with reservoir 
 ------------------------------------------------------------------------- */
 double FixQTB::compute_scalar()
-{
+{ 
+  double **v = atom->v;
+  int *mask = atom->mask;
+  int nlocal = atom->nlocal;
+
+
+  // capture the very first energy transfer TO thermal reservoir
+  if (update->ntimestep == update->beginstep) {
+    energy_onestep = 0.0;
+    for (int i = 0; i < nlocal; i++)
+      if (mask[i] & groupbit)
+        energy_onestep +=
+          flangevin[i][0] * v[i][0] + flangevin[i][0] * v[i][0]+ flangevin[i][0] * v[i][0];
+      energy = 0.5* energy_onestep * update->dt;
+  }
+
+  // convert midstep energy back to previous fullstep energy
+  double energy_me = energy - 0.5 * energy_onestep * update->dt;
+
   double energy_all;
-  MPI_Allreduce(&energy, &energy_all, 1, MPI_DOUBLE, MPI_SUM, world);
-  return energy_all;
+  MPI_Allreduce(&energy_me, &energy_all, 1, MPI_DOUBLE, MPI_SUM, world);
+  return -energy_all;
 
 }
 
@@ -474,8 +460,6 @@ void FixQTB::grow_arrays(int nmax)
   memory->grow(random_array_2,nmax,2*N_f,"qtb:random_array_2");
   memory->grow(fran,nmax,3,"qtb:fran");
   memory->grow(flangevin,nmax,3,"qtb:flangevin");
-  memory->grow(flangevinpre,nmax,3,"qtb:flangevinpre");
-  memory->grow(lv,nmax,3,"qtb:lv");
 }
 
 /* ----------------------------------------------------------------------
