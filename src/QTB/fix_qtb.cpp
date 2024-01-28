@@ -60,6 +60,7 @@ FixQTB::FixQTB(LAMMPS *lmp, int narg, char **arg) :
   seed = 880302;
   f_max = 200.0;
   N_f = 100;
+  zpeflag = 1; // calculate zero-point energy
 
   // reading parameters
   int iarg = 3;
@@ -89,6 +90,10 @@ FixQTB::FixQTB(LAMMPS *lmp, int narg, char **arg) :
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix qtb command");
       N_f = utils::inumeric(FLERR,arg[iarg+1],false,lmp);
       if (N_f <= 0) error->all(FLERR,"Illegal fix qtb command");
+      iarg += 2;
+    } else if (strcmp(arg[iarg],"zpe")==0){
+      if (iarg+2 > narg) error->all(FLERR,"Illegal fix qtb command");
+      zpeflag = utils::logical(FLERR,arg[iarg+1],true,lmp);
       iarg += 2;
     } else error->all(FLERR,"Illegal fix qtb command");
   }
@@ -213,7 +218,10 @@ void FixQTB::init()
       omega_H[k]=sqrt(force->boltz * t_target);
     } else {
       double energy_k= force->hplanck * fabs(f_k);
-      omega_H[k]=sqrt( energy_k * (0.5+1.0/( exp(energy_k/(force->boltz * t_target)) - 1.0 )) );
+      if (zpeflag==1)
+        omega_H[k]=sqrt( energy_k * (0.5+1.0/( exp(energy_k/(force->boltz * t_target)) - 1.0 )) );
+      else
+        omega_H[k]=sqrt( energy_k * (1.0/( exp(energy_k/(force->boltz * t_target)) - 1.0 )) ); 
       omega_H[k]*=alpha*sin((k-N_f)*MY_PI/(2*alpha*N_f))/sin((k-N_f)*MY_PI/(2*N_f));
     }
   }

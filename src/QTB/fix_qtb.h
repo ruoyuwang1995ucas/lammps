@@ -67,6 +67,7 @@ class FixQTB : public Fix {
   int nlevels_respa;
   double **fran, **flangevin, fsum[3], fsumall[3];    // random forces and their sums
   double energy, energy_onestep; // energy exchange with thermal reservoir
+  int zpeflag;
 };
 
 }    // namespace LAMMPS_NS
